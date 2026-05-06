@@ -29,6 +29,15 @@ neurodeck my-jobs
 neurodeck query "say my name"
 neurodeck show <job_id>
 neurodeck submit ./file.mp3 --project <project_id> --role submission --wait
+neurodeck qa-url https://example.com --project <project_id>
+```
+
+`qa-url` records a full-page scroll video with Playwright, submits the `.webm` to TRIBE, waits for the job by default, and prints the top ROI parcels for website QA.
+
+If browser launch fails on a fresh Linux box, install Playwright's system dependencies:
+
+```bash
+npx --prefix ~/.agents/skills/neurodeck playwright install-deps chromium
 ```
 
 ## Run Locally

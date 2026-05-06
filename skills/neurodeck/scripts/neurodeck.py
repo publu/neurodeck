@@ -6,11 +6,16 @@ from __future__ import annotations
 import argparse
 import http.cookiejar as cookiejar
 import json
+import re
+import shutil
+import subprocess
 import sys
 import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import os
 import requests
@@ -19,6 +24,7 @@ API_BASE = os.environ.get("BRAINMASTER_API_BASE", "https://tiktok.highscore.page
 AUTH_BASE = os.environ.get("BRAINMASTER_AUTH_BASE", "https://notes.highscore.page")
 SESSION_DIR = Path(os.environ.get("BRAINMASTER_HOME", str(Path.home() / ".brainmaster")))
 COOKIE_FILE = SESSION_DIR / "cookies.txt"
+SCRIPT_DIR = Path(__file__).resolve().parent
 
 
 @dataclass
@@ -210,6 +216,12 @@ def summarize_roi(roi: dict[str, list[float]], limit: int) -> list[tuple[str, fl
     return sorted(rows, key=lambda x: abs(x[1]), reverse=True)[:limit]
 
 
+def print_roi_summary(roi: dict[str, list[float]], limit: int) -> None:
+    print("\nTop ROI parcels by absolute mean:")
+    for name, mean in summarize_roi(roi, limit):
+        print(f"  {mean: .6f}  {name}")
+
+
 def cmd_show(args: argparse.Namespace) -> None:
     s = session()
     owned = {j.job_id: j for j in owned_jobs(s)}
@@ -228,9 +240,7 @@ def cmd_show(args: argparse.Namespace) -> None:
     print(f"segments: {job.n_segments or meta.get('n_segments', '-')}")
     if input_url:
         print(f"input_url: {input_url}")
-    print("\nTop ROI parcels by absolute mean:")
-    for name, mean in summarize_roi(roi, args.roi_limit):
-        print(f"  {mean: .6f}  {name}")
+    print_roi_summary(roi, args.roi_limit)
     if args.json:
         print("\nmeta:")
         print(json.dumps(meta, indent=2))
@@ -253,10 +263,14 @@ def poll(s: requests.Session, call_id: str, interval: int = 10, max_wait: int = 
     raise SystemExit(f"\nTIMEOUT after {max_wait}s; call_id={call_id} still running")
 
 
-def cmd_submit(args: argparse.Namespace) -> None:
-    s = session()
-    require_auth(s)
-    path = Path(args.filepath)
+def submit_file(
+    s: requests.Session,
+    path: Path,
+    *,
+    project: str | None = None,
+    role: str = "submission",
+    wait: bool = False,
+) -> dict[str, Any] | None:
     if not path.exists():
         raise SystemExit(f"ERROR: file not found: {path}")
     with path.open("rb") as f:
@@ -265,21 +279,119 @@ def cmd_submit(args: argparse.Namespace) -> None:
         raise SystemExit(f"ERROR {r.status_code}: {r.text}")
     call_id = r.json()["call_id"]
     print(f"call_id: {call_id}")
-    if not (args.wait or args.project):
-        return
+    if not (wait or project):
+        return None
     result = poll(s, call_id)
-    if args.project:
+    if project:
         body = {
             "job_id": result["job_id"],
             "filename": path.name,
-            "role": args.role,
+            "role": role,
             "n_segments": result["n_segments"],
         }
-        ar = s.post(f"{API_BASE}/api/tribe/projects/{args.project}/jobs", json=body, timeout=30)
+        ar = s.post(f"{API_BASE}/api/tribe/projects/{project}/jobs", json=body, timeout=30)
         if ar.status_code != 201:
             print(f"WARN: project assignment failed {ar.status_code}: {ar.text}", file=sys.stderr)
         else:
-            print(f"assigned to project {args.project} as {args.role}")
+            print(f"assigned to project {project} as {role}")
+    return result
+
+
+def cmd_submit(args: argparse.Namespace) -> None:
+    s = session()
+    require_auth(s)
+    submit_file(
+        s,
+        Path(args.filepath),
+        project=args.project,
+        role=args.role,
+        wait=args.wait,
+    )
+
+
+def safe_slug(raw: str) -> str:
+    slug = re.sub(r"[^a-zA-Z0-9._-]+", "-", raw.strip().lower()).strip("-")
+    return slug[:80] or "website"
+
+
+def record_scroll_video(url: str, out_dir: Path) -> Path:
+    script = SCRIPT_DIR / "scroll-video.cjs"
+    if not script.exists():
+        raise SystemExit(f"ERROR: missing recorder script: {script}")
+    if not shutil.which("node"):
+        raise SystemExit("ERROR: website QA requires node. Install Node.js, then rerun ./install.sh")
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    env = os.environ.copy()
+    env["NODE_PATH"] = str((SCRIPT_DIR.parent / "node_modules").resolve())
+    proc = subprocess.run(
+        ["node", str(script), url, str(out_dir)],
+        cwd=str(SCRIPT_DIR.parent),
+        text=True,
+        capture_output=True,
+        env=env,
+        check=False,
+    )
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout).strip()
+        raise SystemExit(
+            "ERROR: scroll video capture failed. "
+            "Run ./install.sh to install Playwright/Chromium.\n"
+            f"{detail}"
+        )
+    video_path: Path | None = None
+    for line in proc.stdout.splitlines():
+        if line.startswith("VIDEO_PATH:"):
+            candidate = Path(line.split(":", 1)[1].strip())
+            if candidate.exists():
+                video_path = candidate
+                break
+    if not video_path:
+        videos = sorted(out_dir.glob("*.webm"), key=lambda p: p.stat().st_mtime, reverse=True)
+        if videos:
+            video_path = videos[0]
+    if not video_path:
+        raise SystemExit("ERROR: scroll video capture did not produce a .webm file")
+    return video_path
+
+
+def cmd_qa_url(args: argparse.Namespace) -> None:
+    s = session()
+    require_auth(s)
+    parsed = urlparse(args.url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise SystemExit("ERROR: qa-url requires a full http(s) URL")
+
+    host = safe_slug(parsed.netloc)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    out_dir = Path(args.out_dir).expanduser().resolve() if args.out_dir else SESSION_DIR / "website-videos"
+    print(f"recording scroll video for {args.url}")
+    captured = record_scroll_video(args.url, out_dir)
+
+    final_path = out_dir / f"qa-{host}-{stamp}.webm"
+    if captured.resolve() != final_path.resolve():
+        shutil.move(str(captured), final_path)
+    print(f"video: {final_path}")
+
+    result = submit_file(
+        s,
+        final_path,
+        project=args.project,
+        role=args.role,
+        wait=not args.no_wait,
+    )
+    if not result:
+        return
+
+    job_id = result.get("job_id")
+    if not job_id:
+        return
+    print(f"\nwebsite_qa_job: {job_id}")
+    try:
+        roi = api_json(s, f"/api/tribe/jobs/{job_id}/roi")
+        print_roi_summary(roi, args.roi_limit)
+    except SystemExit as exc:
+        print(f"WARN: could not fetch ROI summary: {exc}", file=sys.stderr)
 
 
 def cmd_status(args: argparse.Namespace) -> None:
@@ -326,6 +438,15 @@ def main() -> None:
     subm.add_argument("--role", choices=["reference", "submission"], default="submission")
     subm.add_argument("--wait", action="store_true")
     subm.set_defaults(func=cmd_submit)
+
+    qa = sub.add_parser("qa-url", help="record a website scroll video and submit it to TRIBE")
+    qa.add_argument("url")
+    qa.add_argument("--project", help="assign result to this project_id")
+    qa.add_argument("--role", choices=["reference", "submission"], default="submission")
+    qa.add_argument("--out-dir", help="directory for captured .webm files")
+    qa.add_argument("--no-wait", action="store_true", help="submit only; do not poll for the TRIBE result")
+    qa.add_argument("--roi-limit", type=int, default=12)
+    qa.set_defaults(func=cmd_qa_url)
 
     st = sub.add_parser("status")
     st.add_argument("call_id")
