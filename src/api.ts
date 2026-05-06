@@ -41,6 +41,20 @@ export interface BrainJob {
   created_at: string;
 }
 
+export interface JobRecord {
+  job_id: string;
+  saved?: boolean;
+  category?: string;
+  outcomes?: string[];
+  note?: string;
+  tags?: string[];
+  updated_at: string;
+}
+
+export type JobRecords = Record<string, JobRecord>;
+export type JobMeta = Record<string, unknown>;
+export type JobRoi = Record<string, number[]>;
+
 async function readError(response: Response): Promise<string> {
   const data = await response.json().catch(() => null);
   return data?.error || data?.detail || `${response.status} ${response.statusText}`;
@@ -95,6 +109,34 @@ export async function getJobs(): Promise<BrainJob[]> {
   });
   if (!response.ok) throw new Error(await readError(response));
   return response.json();
+}
+
+export async function getRecords(): Promise<JobRecords> {
+  const response = await fetch(`${BRAINMASTER_BASE}/api/tribe/records`, {
+    credentials: 'include',
+  });
+  if (!response.ok) throw new Error(await readError(response));
+  return response.json();
+}
+
+export async function getJobMeta(jobId: string): Promise<JobMeta> {
+  const response = await fetch(`${BRAINMASTER_BASE}/api/tribe/jobs/${encodeURIComponent(jobId)}/meta`, {
+    credentials: 'include',
+  });
+  if (!response.ok) throw new Error(await readError(response));
+  return response.json();
+}
+
+export async function getJobRoi(jobId: string): Promise<JobRoi> {
+  const response = await fetch(`${BRAINMASTER_BASE}/api/tribe/jobs/${encodeURIComponent(jobId)}/roi`, {
+    credentials: 'include',
+  });
+  if (!response.ok) throw new Error(await readError(response));
+  return response.json();
+}
+
+export function getJobInputUrl(jobId: string): string {
+  return `${BRAINMASTER_BASE}/api/tribe/jobs/${encodeURIComponent(jobId)}/input`;
 }
 
 export async function createProject(name: string): Promise<BrainProject> {

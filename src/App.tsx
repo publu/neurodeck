@@ -1,12 +1,19 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Brain, CheckCircle2, FolderPlus, Loader2, LogOut, Mail, RefreshCw, ShieldCheck } from 'lucide-react';
+import { Brain, CheckCircle2, ExternalLink, FolderPlus, Loader2, LogOut, Mail, RefreshCw, Search, ShieldCheck } from 'lucide-react';
 import {
   BrainJob,
   BrainProject,
   createProject,
+  getJobInputUrl,
+  getJobMeta,
+  getJobRoi,
   getJobs,
   getProjects,
+  getRecords,
   getSession,
+  JobMeta,
+  JobRecords,
+  JobRoi,
   logout,
   pollLoginStatus,
   requestLogin,
@@ -14,6 +21,19 @@ import {
 } from './api';
 
 type LoginStep = 'idle' | 'sending' | 'waiting' | 'confirmed';
+
+interface OwnedJob {
+  job_id: string;
+  filename: string;
+  n_segments?: number;
+  created_at?: string;
+  source: string;
+}
+
+interface RoiSummary {
+  parcels: number;
+  top: Array<{ name: string; mean: number }>;
+}
 
 function formatDate(value: string): string {
   const date = new Date(value);
@@ -26,6 +46,17 @@ function formatDate(value: string): string {
   }).format(date);
 }
 
+function summarizeRoi(roi: JobRoi): RoiSummary {
+  const rows = Object.entries(roi)
+    .map(([name, series]) => {
+      const values = series.filter((value) => Number.isFinite(value));
+      const mean = values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+      return { name, mean };
+    })
+    .sort((a, b) => Math.abs(b.mean) - Math.abs(a.mean));
+  return { parcels: rows.length, top: rows.slice(0, 8) };
+}
+
 export function App() {
   const [email, setEmail] = useState('');
   const [step, setStep] = useState<LoginStep>('idle');
@@ -34,9 +65,15 @@ export function App() {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [projects, setProjects] = useState<BrainProject[]>([]);
   const [jobs, setJobs] = useState<BrainJob[]>([]);
+  const [records, setRecords] = useState<JobRecords>({});
   const [loadingWorkspace, setLoadingWorkspace] = useState(false);
   const [projectName, setProjectName] = useState('');
   const [creatingProject, setCreatingProject] = useState(false);
+  const [jobQuery, setJobQuery] = useState('');
+  const [selectedJobId, setSelectedJobId] = useState('');
+  const [jobMeta, setJobMeta] = useState<JobMeta | null>(null);
+  const [jobRoi, setJobRoi] = useState<JobRoi | null>(null);
+  const [loadingJob, setLoadingJob] = useState(false);
   const pollTimer = useRef<number | null>(null);
 
   const clearPoll = useCallback(() => {
@@ -48,9 +85,10 @@ export function App() {
     setLoadingWorkspace(true);
     setError('');
     try {
-      const [nextProjects, nextJobs] = await Promise.all([getProjects(), getJobs()]);
+      const [nextProjects, nextJobs, nextRecords] = await Promise.all([getProjects(), getJobs(), getRecords()]);
       setProjects(nextProjects);
       setJobs(nextJobs);
+      setRecords(nextRecords);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load Brainmaster workspace.');
     } finally {
@@ -71,8 +109,56 @@ export function App() {
 
   const stats = useMemo(() => {
     const projectJobs = projects.reduce((sum, project) => sum + project.jobs.length, 0);
-    return { projects: projects.length, jobs: jobs.length, projectJobs };
-  }, [jobs.length, projects]);
+    return { projects: projects.length, projectJobs };
+  }, [projects]);
+
+  const ownedJobs = useMemo(() => {
+    const indexed = new Map(jobs.map((job) => [job.job_id, job]));
+    const byId = new Map<string, OwnedJob>();
+
+    for (const project of projects) {
+      for (const job of project.jobs) {
+        byId.set(job.job_id, {
+          job_id: job.job_id,
+          filename: job.filename,
+          n_segments: job.n_segments,
+          created_at: job.created_at,
+          source: project.name,
+        });
+      }
+    }
+
+    for (const record of Object.values(records)) {
+      const indexedJob = indexed.get(record.job_id);
+      const existing = byId.get(record.job_id);
+      byId.set(record.job_id, {
+        job_id: record.job_id,
+        filename: existing?.filename || indexedJob?.filename || record.job_id,
+        n_segments: existing?.n_segments || indexedJob?.n_segments,
+        created_at: existing?.created_at || indexedJob?.created_at || record.updated_at,
+        source: existing?.source || record.category || 'Saved record',
+      });
+    }
+
+    return [...byId.values()].sort(
+      (a, b) => (Date.parse(b.created_at || '') || 0) - (Date.parse(a.created_at || '') || 0),
+    );
+  }, [jobs, projects, records]);
+
+  const filteredOwnedJobs = useMemo(() => {
+    const query = jobQuery.trim().toLowerCase();
+    if (!query) return ownedJobs;
+    return ownedJobs.filter((job) =>
+      [job.job_id, job.filename, job.source].some((value) => value.toLowerCase().includes(query)),
+    );
+  }, [jobQuery, ownedJobs]);
+
+  const selectedJob = useMemo(
+    () => ownedJobs.find((job) => job.job_id === selectedJobId) || null,
+    [ownedJobs, selectedJobId],
+  );
+
+  const roiSummary = useMemo(() => (jobRoi ? summarizeRoi(jobRoi) : null), [jobRoi]);
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -118,6 +204,11 @@ export function App() {
     setUser(null);
     setProjects([]);
     setJobs([]);
+    setRecords({});
+    setJobQuery('');
+    setSelectedJobId('');
+    setJobMeta(null);
+    setJobRoi(null);
     setMessage('');
     setError('');
     setStep('idle');
@@ -137,6 +228,41 @@ export function App() {
     } finally {
       setCreatingProject(false);
     }
+  }
+
+  async function handleSelectJob(jobId: string) {
+    if (!ownedJobs.some((job) => job.job_id === jobId)) {
+      setError('That job is not in this signed-in workspace.');
+      return;
+    }
+    setSelectedJobId(jobId);
+    setJobMeta(null);
+    setJobRoi(null);
+    setLoadingJob(true);
+    setError('');
+    try {
+      const [nextMeta, nextRoi] = await Promise.all([getJobMeta(jobId), getJobRoi(jobId)]);
+      setJobMeta(nextMeta);
+      setJobRoi(nextRoi);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load job details.');
+    } finally {
+      setLoadingJob(false);
+    }
+  }
+
+  function handleQueryJob(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const query = jobQuery.trim().toLowerCase();
+    if (!query) return;
+    const exact = ownedJobs.find((job) => job.job_id.toLowerCase() === query);
+    const partial = filteredOwnedJobs[0];
+    const match = exact || partial;
+    if (!match) {
+      setError('No matching job in this signed-in workspace.');
+      return;
+    }
+    void handleSelectJob(match.job_id);
   }
 
   return (
@@ -212,8 +338,8 @@ export function App() {
               Projects
             </div>
             <div>
-              <span>{stats.jobs}</span>
-              Jobs visible
+              <span>{ownedJobs.length}</span>
+              My jobs
             </div>
             <div>
               <span>{stats.projectJobs}</span>
@@ -261,23 +387,88 @@ export function App() {
           <section className="panel">
             <div className="section-title">
               <Brain size={20} aria-hidden="true" />
-              <h2>Recent Jobs</h2>
+              <h2>My Job Query</h2>
             </div>
+
+            <form onSubmit={handleQueryJob} className="query-form">
+              <input
+                value={jobQuery}
+                onChange={(event) => setJobQuery(event.target.value)}
+                placeholder="Search by filename, project, or job id"
+              />
+              <button type="submit" disabled={!jobQuery.trim() || loadingJob}>
+                {loadingJob ? <Loader2 className="spin" size={18} /> : <Search size={18} />}
+                Query
+              </button>
+            </form>
+
             <div className="table">
-              <div className="table-head job-grid">
+              <div className="table-head owned-job-grid">
                 <span>File</span>
+                <span>Source</span>
                 <span>Segments</span>
                 <span>Created</span>
               </div>
-              {jobs.slice(0, 12).map((job) => (
-                <div className="table-row job-grid" key={job.job_id}>
+              {filteredOwnedJobs.slice(0, 20).map((job) => (
+                <div
+                  className={`table-row owned-job-grid clickable ${selectedJobId === job.job_id ? 'selected' : ''}`}
+                  key={job.job_id}
+                  onClick={() => void handleSelectJob(job.job_id)}
+                >
                   <strong title={job.job_id}>{job.filename}</strong>
-                  <span>{job.n_segments}</span>
-                  <span>{formatDate(job.created_at)}</span>
+                  <span>{job.source}</span>
+                  <span>{job.n_segments ?? '-'}</span>
+                  <span>{job.created_at ? formatDate(job.created_at) : '-'}</span>
                 </div>
               ))}
-              {!jobs.length && <div className="empty">No jobs found for this account.</div>}
+              {!filteredOwnedJobs.length && <div className="empty">No matching jobs in this workspace.</div>}
             </div>
+
+            {selectedJob && (
+              <div className="job-detail">
+                <div className="job-detail-header">
+                  <div>
+                    <h3>{selectedJob.filename}</h3>
+                    <code>{selectedJob.job_id}</code>
+                  </div>
+                  <a href={getJobInputUrl(selectedJob.job_id)} target="_blank" rel="noreferrer">
+                    <ExternalLink size={16} />
+                    Input
+                  </a>
+                </div>
+
+                {loadingJob && (
+                  <div className="detail-loading">
+                    <Loader2 className="spin" size={18} />
+                    Loading job data
+                  </div>
+                )}
+
+                {!loadingJob && roiSummary && (
+                  <div className="roi-grid">
+                    <div className="roi-stat">
+                      <span>{roiSummary.parcels}</span>
+                      ROI parcels
+                    </div>
+                    <div className="roi-list">
+                      {roiSummary.top.map((roi) => (
+                        <div key={roi.name}>
+                          <strong>{roi.name}</strong>
+                          <span>{roi.mean.toFixed(4)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {!loadingJob && jobMeta && (
+                  <details>
+                    <summary>Raw metadata</summary>
+                    <pre>{JSON.stringify(jobMeta, null, 2)}</pre>
+                  </details>
+                )}
+              </div>
+            )}
           </section>
         </section>
       )}

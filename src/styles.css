@@ -162,7 +162,8 @@ label,
 .section-header,
 .toolbar,
 .input-row,
-.project-form {
+.project-form,
+.query-form {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -188,8 +189,15 @@ label,
 }
 
 .input-row button,
-.project-form button {
+.project-form button,
+.query-form button,
+.job-detail a {
   white-space: nowrap;
+}
+
+.query-form {
+  align-items: stretch;
+  margin-bottom: 14px;
 }
 
 .notice {
@@ -270,6 +278,15 @@ label,
   border-top: 1px solid #2b333d;
 }
 
+.table-row.clickable {
+  cursor: pointer;
+}
+
+.table-row.clickable:hover,
+.table-row.selected {
+  background: rgba(125, 211, 252, 0.08);
+}
+
 .table-row strong {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -282,6 +299,125 @@ label,
 
 .job-grid {
   grid-template-columns: minmax(180px, 1fr) 100px 150px;
+}
+
+.owned-job-grid {
+  grid-template-columns: minmax(180px, 1.2fr) minmax(130px, 0.7fr) 92px 140px;
+}
+
+.job-detail {
+  margin-top: 16px;
+  border: 1px solid #2b333d;
+  border-radius: 8px;
+  background: #10141a;
+  overflow: hidden;
+}
+
+.job-detail-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid #2b333d;
+}
+
+.job-detail h3 {
+  margin: 0 0 6px;
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+
+.job-detail code {
+  color: #a7b0be;
+  font-size: 12px;
+}
+
+.job-detail a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  color: #bae6fd;
+  text-decoration: none;
+  border: 1px solid #345063;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #12202a;
+}
+
+.detail-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px;
+  color: #a7b0be;
+}
+
+.roi-grid {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr);
+  gap: 14px;
+  padding: 16px;
+}
+
+.roi-stat {
+  border: 1px solid #2b333d;
+  border-radius: 8px;
+  padding: 14px;
+  color: #a7b0be;
+}
+
+.roi-stat span {
+  display: block;
+  color: #f5f7fb;
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.roi-list {
+  display: grid;
+  gap: 8px;
+}
+
+.roi-list div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 86px;
+  gap: 12px;
+  align-items: center;
+  min-height: 32px;
+  border-bottom: 1px solid #222a33;
+}
+
+.roi-list strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.roi-list span {
+  color: #bae6fd;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+details {
+  border-top: 1px solid #2b333d;
+  padding: 12px 16px 16px;
+}
+
+summary {
+  cursor: pointer;
+  color: #a7b0be;
+}
+
+pre {
+  max-height: 280px;
+  overflow: auto;
+  border: 1px solid #2b333d;
+  border-radius: 8px;
+  background: #0b0d10;
+  padding: 12px;
+  color: #d8dee8;
 }
 
 .empty {
@@ -308,7 +444,8 @@ label,
   .intro,
   .section-header,
   .input-row,
-  .project-form {
+  .project-form,
+  .query-form {
     align-items: stretch;
     flex-direction: column;
   }
@@ -324,5 +461,19 @@ label,
   .project-grid,
   .job-grid {
     grid-template-columns: minmax(0, 1fr) 72px 110px;
+  }
+
+  .owned-job-grid {
+    grid-template-columns: minmax(0, 1fr) 82px 64px;
+  }
+
+  .owned-job-grid span:nth-child(4) {
+    display: none;
+  }
+
+  .job-detail-header,
+  .roi-grid {
+    grid-template-columns: 1fr;
+    flex-direction: column;
   }
 }
