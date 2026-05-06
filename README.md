@@ -1,13 +1,35 @@
-# Brainmaster Login
+# Brainmaster
 
-A private React client for the Brainmaster/TRIBE v2 magic-link login flow.
+A private React client and installable agent skill for the Brainmaster/TRIBE v2 magic-link login flow.
 
 It uses the same public API surface as the existing Brainmaster CLI and leaderboard:
 
 - Auth backend: `https://notes.highscore.page/api/auth/*`
 - Brainmaster API: `https://tiktok.highscore.page/api/tribe/*`
 
-The app stores no password, no API key, and no server secret. Users request a magic link, click it in email, and the browser session cookie is then used for authenticated Brainmaster requests.
+The app and skill store no password, no API key, and no server secret. Users request a magic link, click it in email, and the session cookie is then used for authenticated Brainmaster requests.
+
+## Install Skill
+
+```bash
+git clone https://github.com/publu/brainmaster-login.git
+cd brainmaster-login
+./install.sh
+```
+
+The installer copies `skills/brainmaster` into `${AGENT_SKILLS_DIR:-~/.agents/skills}` and links the CLI as `${AGENT_BIN_DIR:-~/.local/bin}/brainmaster`.
+
+Useful commands:
+
+```bash
+brainmaster login --email user@example.com
+brainmaster whoami
+brainmaster projects
+brainmaster my-jobs
+brainmaster query "say my name"
+brainmaster show <job_id>
+brainmaster submit ./file.mp3 --project <project_id> --role submission --wait
+```
 
 ## Run Locally
 
@@ -16,7 +38,7 @@ npm install
 npm run dev
 ```
 
-Open the printed local URL, request a magic link, then click the email link. Once confirmed, the app shows the signed-in email, project list, and recent Brainmaster jobs.
+Open the printed local URL, request a magic link, then click the email link. Once confirmed, the app shows the signed-in email, project list, and queryable owned jobs.
 
 ## API Notes
 
@@ -46,4 +68,5 @@ Brainmaster examples:
 ```http
 GET https://tiktok.highscore.page/api/tribe/projects
 GET https://tiktok.highscore.page/api/tribe/jobs
+GET https://tiktok.highscore.page/api/tribe/records
 ```
