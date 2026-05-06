@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""brainmaster skill CLI: login, submit, and query owned TRIBE v2 jobs."""
+"""Neurodeck CLI: login, submit, and query owned Brainmaster/TRIBE v2 jobs."""
 
 from __future__ import annotations
 
@@ -63,7 +63,7 @@ def whoami_email(s: requests.Session) -> str | None:
 def require_auth(s: requests.Session) -> str:
     email = whoami_email(s)
     if not email:
-        raise SystemExit("ERROR: not logged in. Run: brainmaster login --email you@example.com")
+        raise SystemExit("ERROR: not logged in. Run: neurodeck login --email you@example.com")
     return email
 
 
@@ -289,7 +289,7 @@ def cmd_status(args: argparse.Namespace) -> None:
 
 
 def main() -> None:
-    p = argparse.ArgumentParser(prog="brainmaster", description=__doc__)
+    p = argparse.ArgumentParser(prog="neurodeck", description=__doc__)
     sub = p.add_subparsers(dest="cmd", required=True)
 
     sl = sub.add_parser("login")

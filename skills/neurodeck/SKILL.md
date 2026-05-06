@@ -1,16 +1,16 @@
 ---
-name: brainmaster
+name: neurodeck
 description: Log in to Brainmaster/TRIBE v2 with magic links, submit media or text jobs, list/query a user's own workspace jobs, and fetch job metadata, ROI summaries, and input links.
-metadata: {"openclaw":{"emoji":"🧠","homepage":"https://github.com/publu/brainmaster-login","requires":{"bins":["python3"],"env":[]},"install":[{"id":"requests","kind":"python","packages":["requests"],"label":"Install Python requests"}]}}
+metadata: {"openclaw":{"emoji":"🧠","homepage":"https://github.com/publu/neurodeck","requires":{"bins":["python3"],"env":[]},"install":[{"id":"requests","kind":"python","packages":["requests"],"label":"Install Python requests"}]}}
 ---
 
-# Brainmaster
+# Neurodeck
 
 Use this skill when a user asks to log in to Brainmaster, submit media/text to TRIBE v2, list or query their own Brainmaster jobs, create projects, check job status, or fetch job ROI/meta/input.
 
 ## Core Rules
 
-- Use the bundled CLI: `scripts/brainmaster.py`.
+- Use the bundled CLI: `scripts/neurodeck.py`.
 - Authentication is magic-link only. Never ask for or store passwords.
 - Brainmaster session cookies live in `${BRAINMASTER_HOME:-~/.brainmaster}/cookies.txt`.
 - Treat `/api/tribe/jobs` as a broad indexed list, not a pure ownership boundary.
@@ -20,13 +20,13 @@ Use this skill when a user asks to log in to Brainmaster, submit media/text to T
 ## Quick Commands
 
 ```bash
-python3 skills/brainmaster/scripts/brainmaster.py login --email user@example.com
-python3 skills/brainmaster/scripts/brainmaster.py whoami
-python3 skills/brainmaster/scripts/brainmaster.py projects
-python3 skills/brainmaster/scripts/brainmaster.py my-jobs
-python3 skills/brainmaster/scripts/brainmaster.py query "say my name"
-python3 skills/brainmaster/scripts/brainmaster.py show <job_id>
-python3 skills/brainmaster/scripts/brainmaster.py submit ./file.mp3 --project <project_id> --role submission --wait
+python3 skills/neurodeck/scripts/neurodeck.py login --email user@example.com
+python3 skills/neurodeck/scripts/neurodeck.py whoami
+python3 skills/neurodeck/scripts/neurodeck.py projects
+python3 skills/neurodeck/scripts/neurodeck.py my-jobs
+python3 skills/neurodeck/scripts/neurodeck.py query "say my name"
+python3 skills/neurodeck/scripts/neurodeck.py show <job_id>
+python3 skills/neurodeck/scripts/neurodeck.py submit ./file.mp3 --project <project_id> --role submission --wait
 ```
 
 ## Login Flow

@@ -273,8 +273,8 @@ export function App() {
             <Brain size={26} aria-hidden="true" />
           </div>
           <div>
-            <h1>Brainmaster</h1>
-            <p>Private login client for TRIBE v2 workspace access.</p>
+            <h1>Neurodeck</h1>
+            <p>Private command deck for TRIBE v2 workspace access.</p>
           </div>
         </div>
         <div className="status-pill">

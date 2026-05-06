@@ -1,6 +1,6 @@
-# Brainmaster
+# Neurodeck
 
-A private React client and installable agent skill for the Brainmaster/TRIBE v2 magic-link login flow.
+An installable agent skill and private React client for Brainmaster/TRIBE v2 login, submission, and owned-job query.
 
 It uses the same public API surface as the existing Brainmaster CLI and leaderboard:
 
@@ -12,23 +12,23 @@ The app and skill store no password, no API key, and no server secret. Users req
 ## Install Skill
 
 ```bash
-git clone https://github.com/publu/brainmaster-login.git
-cd brainmaster-login
+git clone https://github.com/publu/neurodeck.git
+cd neurodeck
 ./install.sh
 ```
 
-The installer copies `skills/brainmaster` into `${AGENT_SKILLS_DIR:-~/.agents/skills}` and links the CLI as `${AGENT_BIN_DIR:-~/.local/bin}/brainmaster`.
+The installer copies `skills/neurodeck` into `${AGENT_SKILLS_DIR:-~/.agents/skills}` and links the CLI as `${AGENT_BIN_DIR:-~/.local/bin}/neurodeck`.
 
 Useful commands:
 
 ```bash
-brainmaster login --email user@example.com
-brainmaster whoami
-brainmaster projects
-brainmaster my-jobs
-brainmaster query "say my name"
-brainmaster show <job_id>
-brainmaster submit ./file.mp3 --project <project_id> --role submission --wait
+neurodeck login --email user@example.com
+neurodeck whoami
+neurodeck projects
+neurodeck my-jobs
+neurodeck query "say my name"
+neurodeck show <job_id>
+neurodeck submit ./file.mp3 --project <project_id> --role submission --wait
 ```
 
 ## Run Locally
