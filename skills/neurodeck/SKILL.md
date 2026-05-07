@@ -29,6 +29,8 @@ python3 skills/neurodeck/scripts/neurodeck.py query "say my name"
 python3 skills/neurodeck/scripts/neurodeck.py show <job_id>
 python3 skills/neurodeck/scripts/neurodeck.py submit ./file.mp3 --project <project_id> --role submission --wait
 python3 skills/neurodeck/scripts/neurodeck.py qa-url https://example.com --project <project_id>
+python3 skills/neurodeck/scripts/neurodeck.py costs
+python3 skills/neurodeck/scripts/neurodeck.py costs --by-email
 ```
 
 ## Login Flow
@@ -93,6 +95,8 @@ Brainmaster backend:
 - `GET /api/tribe/records`
 - `POST /api/tribe/submit`
 - `GET /api/tribe/status/:call_id`
+- `GET /api/tribe/costs`
+- `GET /api/tribe/costs/by-email` (admin-only)
 - `GET /api/tribe/jobs/:job_id/meta`
 - `GET /api/tribe/jobs/:job_id/roi`
 - `GET /api/tribe/jobs/:job_id/input`

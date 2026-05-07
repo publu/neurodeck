@@ -30,9 +30,13 @@ neurodeck query "say my name"
 neurodeck show <job_id>
 neurodeck submit ./file.mp3 --project <project_id> --role submission --wait
 neurodeck qa-url https://example.com --project <project_id>
+neurodeck costs
+neurodeck costs --by-email
 ```
 
 `qa-url` records a full-page scroll video with Playwright, submits the `.webm` to TRIBE, waits for the job by default, and prints the top ROI parcels for website QA.
+
+`costs` shows the signed-in email's TRIBE inference ledger and estimated totals. `costs --by-email` shows the admin-only all-email rollup when the backend allows the signed-in email.
 
 If browser launch fails on a fresh Linux box, install Playwright's system dependencies:
 
@@ -78,4 +82,6 @@ Brainmaster examples:
 GET https://tiktok.highscore.page/api/tribe/projects
 GET https://tiktok.highscore.page/api/tribe/jobs
 GET https://tiktok.highscore.page/api/tribe/records
+GET https://tiktok.highscore.page/api/tribe/costs
+GET https://tiktok.highscore.page/api/tribe/costs/by-email
 ```

@@ -400,6 +400,56 @@ def cmd_status(args: argparse.Namespace) -> None:
     print(json.dumps(api_json(s, f"/api/tribe/status/{args.call_id}"), indent=2))
 
 
+def cmd_costs(args: argparse.Namespace) -> None:
+    s = session()
+    require_auth(s)
+    path = "/api/tribe/costs/by-email" if args.by_email else "/api/tribe/costs"
+    data = api_json(s, path)
+    if args.json:
+        print(json.dumps(data, indent=2))
+        return
+    pricing = data.get("pricing", {}) if isinstance(data, dict) else {}
+    rate = pricing.get("gpu_hourly_usd", 0)
+    source = "env override" if pricing.get("configured") else "Modal A100 40GB default"
+    print(f"pricing: ${rate}/GPU-hour ({source})")
+    if args.by_email:
+        emails = data.get("emails", []) if isinstance(data, dict) else []
+        print(f"{'email':<36}  {'calls':>5}  {'pending':>7}  {'errors':>6}  {'seconds':>10}  {'est_cost':>10}")
+        print("-" * 92)
+        for row in emails:
+            print(
+                f"{row.get('email', '-'):<36}  "
+                f"{row.get('calls', 0):>5}  "
+                f"{row.get('pending_calls', 0):>7}  "
+                f"{row.get('error_calls', 0):>6}  "
+                f"{row.get('total_modal_wall_seconds', row.get('total_processing_seconds', 0)):>10.1f}  "
+                f"${row.get('total_estimated_cost_usd', 0):>9.4f}"
+            )
+        return
+    summary = data.get("summary", {}) if isinstance(data, dict) else {}
+    print(
+        f"{summary.get('email', '-')}: "
+        f"{summary.get('calls', 0)} calls, "
+        f"{summary.get('pending_calls', 0)} pending, "
+        f"{summary.get('error_calls', 0)} errors, "
+        f"{summary.get('total_modal_wall_seconds', summary.get('total_processing_seconds', 0)):.1f}s, "
+        f"${summary.get('total_estimated_cost_usd', 0):.4f}"
+    )
+    calls = data.get("calls", []) if isinstance(data, dict) else []
+    if calls:
+        print(f"\n{'call_id':<28}  {'status':<7}  {'job_id':<14}  {'seconds':>9}  {'est_cost':>10}  filename")
+        print("-" * 100)
+        for call in calls[: args.limit]:
+            print(
+                f"{call.get('call_id', '-'):<28}  "
+                f"{call.get('status', '-'):<7}  "
+                f"{call.get('job_id', '-'):<14}  "
+                f"{call.get('modal_wall_seconds', call.get('processing_seconds', 0)):>9.1f}  "
+                f"${call.get('estimated_cost_usd', 0):>9.4f}  "
+                f"{call.get('filename', '')}"
+            )
+
+
 def main() -> None:
     p = argparse.ArgumentParser(prog="neurodeck", description=__doc__)
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -451,6 +501,12 @@ def main() -> None:
     st = sub.add_parser("status")
     st.add_argument("call_id")
     st.set_defaults(func=cmd_status)
+
+    costs = sub.add_parser("costs", help="show TRIBE inference cost tracking for this email")
+    costs.add_argument("--by-email", action="store_true", help="admin-only all-email rollup")
+    costs.add_argument("--limit", type=int, default=25)
+    costs.add_argument("--json", action="store_true")
+    costs.set_defaults(func=cmd_costs)
 
     args = p.parse_args()
     args.func(args)
