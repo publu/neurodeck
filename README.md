@@ -34,15 +34,9 @@ neurodeck costs
 neurodeck costs --by-email
 ```
 
-`qa-url` records a full-page scroll video with Playwright, submits the `.webm` to TRIBE, waits for the job by default, and prints the top ROI parcels for website QA.
+`qa-url` asks Modal to capture the live website, submits the fresh recording to TRIBE, waits for the job by default, and prints the top ROI parcels for website QA. Running the same URL again creates a new Modal call because websites can change.
 
 `costs` shows the signed-in email's TRIBE inference ledger and estimated totals. `costs --by-email` shows the admin-only all-email rollup when the backend allows the signed-in email.
-
-If browser launch fails on a fresh Linux box, install Playwright's system dependencies:
-
-```bash
-npx --prefix ~/.agents/skills/neurodeck playwright install-deps chromium
-```
 
 ## Run Locally
 

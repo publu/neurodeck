@@ -1,17 +1,17 @@
 ---
 name: neurodeck
-description: Log in to Brainmaster/TRIBE v2 with magic links, submit media/text/website QA videos, list/query a user's own workspace jobs, and fetch job metadata, ROI summaries, and input links.
-metadata: {"openclaw":{"emoji":"🧠","homepage":"https://github.com/publu/neurodeck","requires":{"bins":["python3","node"],"env":[]},"install":[{"id":"requests","kind":"python","packages":["requests"],"label":"Install Python requests"},{"id":"playwright","kind":"node","packages":["playwright"],"label":"Install Playwright for website QA"}]}}
+description: Log in to Brainmaster/TRIBE v2 with magic links, submit media/website QA jobs, list/query a user's own workspace jobs, and fetch job metadata, ROI summaries, and input links.
+metadata: {"openclaw":{"emoji":"brain","homepage":"https://github.com/publu/neurodeck","requires":{"bins":["python3"],"env":[]},"install":[{"id":"requests","kind":"python","packages":["requests"],"label":"Install Python requests"}]}}
 ---
 
 # Neurodeck
 
-Use this skill when a user asks to log in to Brainmaster, submit media/text to TRIBE v2, QA a website through a captured scroll video, list or query their own Brainmaster jobs, create projects, check job status, or fetch job ROI/meta/input.
+Use this skill when a user asks to log in to Brainmaster, submit media to TRIBE v2, QA a website through Modal capture, list or query their own Brainmaster jobs, create projects, check job status, or fetch job ROI/meta/input.
 
 ## Core Rules
 
 - Use the bundled CLI: `scripts/neurodeck.py`.
-- For website QA, use `qa-url`; it records a deterministic full-page scroll video with Playwright, submits the `.webm` to TRIBE, then summarizes the ROI.
+- For website QA, use `qa-url`; it asks Modal to capture the URL, submits that fresh recording to TRIBE, then summarizes the ROI.
 - Authentication is magic-link only. Never ask for or store passwords.
 - Brainmaster session cookies live in `${BRAINMASTER_HOME:-~/.brainmaster}/cookies.txt`.
 - Treat `/api/tribe/jobs` as a broad indexed list, not a pure ownership boundary.
@@ -70,13 +70,13 @@ python3 skills/neurodeck/scripts/neurodeck.py qa-url https://site.example --proj
 
 This command:
 
-- records a `1440x900` Playwright scroll video into `${BRAINMASTER_HOME:-~/.brainmaster}/website-videos`
-- submits the video to `/api/tribe/submit`
+- calls `/api/tribe/submit-url`, which captures the page in Modal and processes the recording through TRIBE
 - waits for completion by default
 - assigns the completed job to the project when `--project` is provided
 - prints the TRIBE job ID and top ROI parcels by absolute mean
+- creates a new Modal call every time, even for the same URL
 
-Use `--no-wait` for fire-and-forget capture/submission. Use `--out-dir` to keep captures in a repo-local folder.
+Use `--no-wait` for fire-and-forget capture/submission. Use `--duration` to control capture length.
 
 ## API Map
 
@@ -94,6 +94,7 @@ Brainmaster backend:
 - `GET /api/tribe/jobs`
 - `GET /api/tribe/records`
 - `POST /api/tribe/submit`
+- `POST /api/tribe/submit-url`
 - `GET /api/tribe/status/:call_id`
 - `GET /api/tribe/costs`
 - `GET /api/tribe/costs/by-email` (admin-only)

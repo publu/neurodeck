@@ -7,12 +7,9 @@ import argparse
 import http.cookiejar as cookiejar
 import json
 import re
-import shutil
-import subprocess
 import sys
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -24,7 +21,6 @@ API_BASE = os.environ.get("BRAINMASTER_API_BASE", "https://tiktok.highscore.page
 AUTH_BASE = os.environ.get("BRAINMASTER_AUTH_BASE", "https://notes.highscore.page")
 SESSION_DIR = Path(os.environ.get("BRAINMASTER_HOME", str(Path.home() / ".brainmaster")))
 COOKIE_FILE = SESSION_DIR / "cookies.txt"
-SCRIPT_DIR = Path(__file__).resolve().parent
 
 
 @dataclass
@@ -314,68 +310,60 @@ def safe_slug(raw: str) -> str:
     return slug[:80] or "website"
 
 
-def record_scroll_video(url: str, out_dir: Path) -> Path:
-    script = SCRIPT_DIR / "scroll-video.cjs"
-    if not script.exists():
-        raise SystemExit(f"ERROR: missing recorder script: {script}")
-    if not shutil.which("node"):
-        raise SystemExit("ERROR: website QA requires node. Install Node.js, then rerun ./install.sh")
-
-    out_dir.mkdir(parents=True, exist_ok=True)
-    env = os.environ.copy()
-    env["NODE_PATH"] = str((SCRIPT_DIR.parent / "node_modules").resolve())
-    proc = subprocess.run(
-        ["node", str(script), url, str(out_dir)],
-        cwd=str(SCRIPT_DIR.parent),
-        text=True,
-        capture_output=True,
-        env=env,
-        check=False,
+def submit_url(
+    s: requests.Session,
+    website_url: str,
+    *,
+    duration_seconds: int = 30,
+    project: str | None = None,
+    role: str = "submission",
+    wait: bool = True,
+) -> dict[str, Any] | None:
+    parsed = urlparse(website_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise SystemExit("ERROR: qa-url requires a full http(s) URL")
+    filename = f"{safe_slug(parsed.netloc)}.mp4"
+    r = s.post(
+        f"{API_BASE}/api/tribe/submit-url",
+        json={
+            "url": website_url,
+            "filename": filename,
+            "duration_seconds": max(5, min(int(duration_seconds), 120)),
+            "width": 1280,
+            "height": 720,
+        },
+        timeout=30,
     )
-    if proc.returncode != 0:
-        detail = (proc.stderr or proc.stdout).strip()
-        raise SystemExit(
-            "ERROR: scroll video capture failed. "
-            "Run ./install.sh to install Playwright/Chromium.\n"
-            f"{detail}"
-        )
-    video_path: Path | None = None
-    for line in proc.stdout.splitlines():
-        if line.startswith("VIDEO_PATH:"):
-            candidate = Path(line.split(":", 1)[1].strip())
-            if candidate.exists():
-                video_path = candidate
-                break
-    if not video_path:
-        videos = sorted(out_dir.glob("*.webm"), key=lambda p: p.stat().st_mtime, reverse=True)
-        if videos:
-            video_path = videos[0]
-    if not video_path:
-        raise SystemExit("ERROR: scroll video capture did not produce a .webm file")
-    return video_path
+    if r.status_code != 200:
+        raise SystemExit(f"ERROR {r.status_code}: {r.text}")
+    call_id = r.json()["call_id"]
+    print(f"call_id: {call_id}")
+    if not (wait or project):
+        return None
+    result = poll(s, call_id)
+    if project:
+        body = {
+            "job_id": result["job_id"],
+            "filename": filename,
+            "role": role,
+            "n_segments": result["n_segments"],
+        }
+        ar = s.post(f"{API_BASE}/api/tribe/projects/{project}/jobs", json=body, timeout=30)
+        if ar.status_code != 201:
+            print(f"WARN: project assignment failed {ar.status_code}: {ar.text}", file=sys.stderr)
+        else:
+            print(f"assigned to project {project} as {role}")
+    return result
 
 
 def cmd_qa_url(args: argparse.Namespace) -> None:
     s = session()
     require_auth(s)
-    parsed = urlparse(args.url)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise SystemExit("ERROR: qa-url requires a full http(s) URL")
-
-    host = safe_slug(parsed.netloc)
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-    out_dir = Path(args.out_dir).expanduser().resolve() if args.out_dir else SESSION_DIR / "website-videos"
-    print(f"recording scroll video for {args.url}")
-    captured = record_scroll_video(args.url, out_dir)
-
-    final_path = out_dir / f"qa-{host}-{stamp}.webm"
-    if captured.resolve() != final_path.resolve():
-        shutil.move(str(captured), final_path)
-    print(f"video: {final_path}")
-
-    result = submit_file(
+    print(f"submitting Modal website capture for {args.url}")
+    result = submit_url(
         s,
-        final_path,
+        args.url,
+        duration_seconds=args.duration,
         project=args.project,
         role=args.role,
         wait=not args.no_wait,
@@ -489,11 +477,11 @@ def main() -> None:
     subm.add_argument("--wait", action="store_true")
     subm.set_defaults(func=cmd_submit)
 
-    qa = sub.add_parser("qa-url", help="record a website scroll video and submit it to TRIBE")
+    qa = sub.add_parser("qa-url", help="capture a website in Modal and submit it to TRIBE")
     qa.add_argument("url")
     qa.add_argument("--project", help="assign result to this project_id")
     qa.add_argument("--role", choices=["reference", "submission"], default="submission")
-    qa.add_argument("--out-dir", help="directory for captured .webm files")
+    qa.add_argument("--duration", type=int, default=30, help="Modal capture duration in seconds, clamped to 5-120")
     qa.add_argument("--no-wait", action="store_true", help="submit only; do not poll for the TRIBE result")
     qa.add_argument("--roi-limit", type=int, default=12)
     qa.set_defaults(func=cmd_qa_url)
